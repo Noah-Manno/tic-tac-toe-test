@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 import './App.css'; // Import the CSS file
 
-const socket = io('http://localhost:5001'); // Connect to backend
+const socket = io('https://tic-tac-back-test.onrender.com/'); // Connect to backend
 
 const App = () => {
   const [board, setBoard] = useState(Array(9).fill(null));
