@@ -27,9 +27,16 @@ const App = () => {
       setXIsNext(move.player === 'O'); // Toggle next player
     });
 
+    socket.on('gameReset', () => {
+      setBoard(Array(9).fill(null));
+      setXIsNext(true);
+      setGameStatus('Waiting for players to join...');
+    });
+
     return () => {
       socket.off('playerRole');
       socket.off('moveMade');
+      socket.off('gameReset');
     };
   }, []);
 

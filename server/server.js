@@ -8,7 +8,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: "https://tic-tac-toe-test.onrender.com", // Allow all origins for simplicity; adjust as needed
+    origin: "https://tic-tac-toe-test.onrender.com", // Allow specific origin
     methods: ["GET", "POST"]
   }
 });
@@ -28,17 +28,46 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
 
-// WebSocket connection
+// Game state management
+let players = [];
+let board = Array(9).fill(null);
+let xIsNext = true; // X always starts
+
 io.on('connection', (socket) => {
   console.log('New client connected');
-  
+
+  // Assign roles to players
+  if (players.length < 2) {
+    const role = players.length === 0 ? 'X' : 'O';
+    players.push({ id: socket.id, role });
+    socket.emit('playerRole', role);
+    console.log(`Player ${role} connected`);
+
+    // Inform other player about the new player
+    if (players.length === 2) {
+      io.emit('playerRole', players.find(p => p.id !== socket.id).role);
+    }
+  }
+
   socket.on('makeMove', (move) => {
-    io.emit('moveMade', move); // Broadcast move to all clients
-    console.log('move made');
+    if (board[move.index] || (move.player !== (xIsNext ? 'X' : 'O'))) {
+      // Invalid move or not the player's turn
+      return;
+    }
+    board[move.index] = move.player;
+    xIsNext = !xIsNext;
+    io.emit('moveMade', { index: move.index, player: move.player });
+    console.log(`Move made by ${move.player} at index ${move.index}`);
   });
 
   socket.on('disconnect', () => {
     console.log('Client disconnected');
+    // Remove player from the list
+    players = players.filter(p => p.id !== socket.id);
+    // Reset game if a player disconnects
+    board = Array(9).fill(null);
+    xIsNext = true;
+    io.emit('gameReset'); // Notify clients that the game has been reset
   });
 });
 
