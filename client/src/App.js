@@ -6,32 +6,43 @@ const socket = io('https://tic-tac-toe-test.onrender.com'); // Connect to backen
 
 const App = () => {
   const [board, setBoard] = useState(Array(9).fill(null));
+  const [player, setPlayer] = useState(null); // 'X' or 'O'
   const [xIsNext, setXIsNext] = useState(true);
-
+  const [gameStatus, setGameStatus] = useState('Waiting for another player to join...');
+  
   useEffect(() => {
+    // Listen for player roles
+    socket.on('playerRole', (role) => {
+      setPlayer(role);
+      setGameStatus(`You are player ${role}`);
+    });
+
+    // Listen for moves made by other players
     socket.on('moveMade', (move) => {
       setBoard((prevBoard) => {
         const newBoard = [...prevBoard];
         newBoard[move.index] = move.player;
         return newBoard;
       });
+      setXIsNext(move.player === 'O'); // Toggle next player
     });
 
     return () => {
+      socket.off('playerRole');
       socket.off('moveMade');
     };
   }, []);
 
   const handleClick = (index) => {
-    if (board[index] || calculateWinner(board)) return;
+    if (board[index] || calculateWinner(board) || (player !== (xIsNext ? 'X' : 'O'))) return;
 
-    const player = xIsNext ? 'X' : 'O';
+    const currentPlayer = xIsNext ? 'X' : 'O';
     setBoard((prevBoard) => {
       const newBoard = [...prevBoard];
-      newBoard[index] = player;
+      newBoard[index] = currentPlayer;
       return newBoard;
     });
-    socket.emit('makeMove', { index, player });
+    socket.emit('makeMove', { index, player: currentPlayer });
     setXIsNext(!xIsNext);
   };
 
@@ -56,6 +67,7 @@ const App = () => {
       ) : (
         <h2 className="next-player">Next Player: {xIsNext ? 'X' : 'O'}</h2>
       )}
+      <h3>{gameStatus}</h3>
     </div>
   );
 };
@@ -81,4 +93,5 @@ const calculateWinner = (squares) => {
 };
 
 export default App;
+
 
