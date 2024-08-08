@@ -5,19 +5,39 @@ import './App.css'; // Import the CSS file
 const socket = io('https://tic-tac-toe-test.onrender.com'); // Connect to backend
 
 const App = () => {
-  const [board, setBoard] = useState(Array(9).fill(null));
+  const [roomName, setRoomName] = useState('');
   const [player, setPlayer] = useState(null); // 'X' or 'O'
+  const [board, setBoard] = useState(Array(9).fill(null));
   const [xIsNext, setXIsNext] = useState(true);
-  const [gameStatus, setGameStatus] = useState('Waiting for another player to join...');
-  
+  const [gameStatus, setGameStatus] = useState('Enter a room to start playing...');
+  const [currentRoom, setCurrentRoom] = useState('');
+
   useEffect(() => {
-    // Listen for player roles
     socket.on('playerRole', (role) => {
       setPlayer(role);
       setGameStatus(`You are player ${role}`);
     });
 
-    // Listen for moves made by other players
+    socket.on('roomCreated', (room) => {
+      setCurrentRoom(room);
+      setGameStatus(`Room ${room} created. Waiting for another player to join...`);
+    });
+
+    socket.on('roomJoined', (room) => {
+      setCurrentRoom(room);
+      setGameStatus(`Joined room ${room}. Waiting for another player to join...`);
+    });
+
+    socket.on('roomError', (error) => {
+      setGameStatus(error);
+    });
+
+    socket.on('gameStart', () => {
+      setBoard(Array(9).fill(null));
+      setXIsNext(true);
+      setGameStatus('Game started!');
+    });
+
     socket.on('moveMade', (move) => {
       setBoard((prevBoard) => {
         const newBoard = [...prevBoard];
@@ -27,21 +47,30 @@ const App = () => {
       setXIsNext(move.player === 'O'); // Toggle next player
     });
 
-    socket.on('gameReset', () => {
-      setBoard(Array(9).fill(null));
-      setXIsNext(true);
-      setGameStatus('Waiting for players to join...');
-    });
-
     return () => {
       socket.off('playerRole');
+      socket.off('roomCreated');
+      socket.off('roomJoined');
+      socket.off('roomError');
+      socket.off('gameStart');
       socket.off('moveMade');
-      socket.off('gameReset');
     };
   }, []);
 
+  const createRoom = () => {
+    if (roomName) {
+      socket.emit('createRoom', roomName);
+    }
+  };
+
+  const joinRoom = () => {
+    if (roomName) {
+      socket.emit('joinRoom', roomName);
+    }
+  };
+
   const handleClick = (index) => {
-    if (board[index] || calculateWinner(board) || (player !== (xIsNext ? 'X' : 'O'))) return;
+    if (!player || board[index] || calculateWinner(board) || (player !== (xIsNext ? 'X' : 'O'))) return;
 
     const currentPlayer = xIsNext ? 'X' : 'O';
     setBoard((prevBoard) => {
@@ -49,7 +78,7 @@ const App = () => {
       newBoard[index] = currentPlayer;
       return newBoard;
     });
-    socket.emit('makeMove', { index, player: currentPlayer });
+    socket.emit('makeMove', currentRoom, { index, player: currentPlayer });
     setXIsNext(!xIsNext);
   };
 
@@ -58,21 +87,33 @@ const App = () => {
   return (
     <div>
       <h1>Tic-Tac-Toe</h1>
-      <div className="board">
-        {board.map((value, index) => (
-          <button
-            key={index}
-            className="button"
-            onClick={() => handleClick(index)}
-          >
-            {value}
-          </button>
-        ))}
-      </div>
-      {winner ? (
-        <h2 className="winner">Winner: {winner}</h2>
-      ) : (
-        <h2 className="next-player">Next Player: {xIsNext ? 'X' : 'O'}</h2>
+      <input
+        type="text"
+        value={roomName}
+        onChange={(e) => setRoomName(e.target.value)}
+        placeholder="Enter room name"
+      />
+      <button onClick={createRoom}>Create Room</button>
+      <button onClick={joinRoom}>Join Room</button>
+      {currentRoom && (
+        <>
+          <div className="board">
+            {board.map((value, index) => (
+              <button
+                key={index}
+                className="button"
+                onClick={() => handleClick(index)}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+          {winner ? (
+            <h2 className="winner">Winner: {winner}</h2>
+          ) : (
+            <h2 className="next-player">Next Player: {xIsNext ? 'X' : 'O'}</h2>
+          )}
+        </>
       )}
       <h3>{gameStatus}</h3>
     </div>

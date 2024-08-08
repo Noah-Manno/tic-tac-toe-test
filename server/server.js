@@ -28,46 +28,57 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'build', 'index.html'));
 });
 
-// Game state management
-let players = [];
-let board = Array(9).fill(null);
-let xIsNext = true; // X always starts
+// Room management
+const rooms = {};
 
 io.on('connection', (socket) => {
   console.log('New client connected');
 
-  // Assign roles to players
-  if (players.length < 2) {
-    const role = players.length === 0 ? 'X' : 'O';
-    players.push({ id: socket.id, role });
-    socket.emit('playerRole', role);
-    console.log(`Player ${role} connected`);
-
-    // Inform other player about the new player
-    if (players.length === 2) {
-      io.emit('playerRole', players.find(p => p.id !== socket.id).role);
+  socket.on('createRoom', (roomName) => {
+    if (!rooms[roomName]) {
+      rooms[roomName] = { players: [], board: Array(9).fill(null), xIsNext: true };
+      socket.join(roomName);
+      socket.emit('roomCreated', roomName);
+      console.log(`Room ${roomName} created`);
+    } else {
+      socket.emit('roomError', 'Room already exists');
     }
-  }
+  });
 
-  socket.on('makeMove', (move) => {
-    if (board[move.index] || (move.player !== (xIsNext ? 'X' : 'O'))) {
-      // Invalid move or not the player's turn
-      return;
+  socket.on('joinRoom', (roomName) => {
+    if (rooms[roomName]) {
+      const room = rooms[roomName];
+      if (room.players.length < 2) {
+        room.players.push(socket.id);
+        socket.join(roomName);
+        socket.emit('roomJoined', roomName);
+        if (room.players.length === 2) {
+          const [player1, player2] = room.players;
+          io.to(player1).emit('playerRole', 'X');
+          io.to(player2).emit('playerRole', 'O');
+          io.to(roomName).emit('gameStart');
+        }
+        console.log(`Player joined room ${roomName}`);
+      } else {
+        socket.emit('roomError', 'Room is full');
+      }
+    } else {
+      socket.emit('roomError', 'Room does not exist');
     }
-    board[move.index] = move.player;
-    xIsNext = !xIsNext;
-    io.emit('moveMade', { index: move.index, player: move.player });
-    console.log(`Move made by ${move.player} at index ${move.index}`);
+  });
+
+  socket.on('makeMove', (roomName, move) => {
+    const room = rooms[roomName];
+    if (room && room.board[move.index] === null && move.player === (room.xIsNext ? 'X' : 'O')) {
+      room.board[move.index] = move.player;
+      room.xIsNext = !room.xIsNext;
+      io.to(roomName).emit('moveMade', { index: move.index, player: move.player });
+    }
   });
 
   socket.on('disconnect', () => {
     console.log('Client disconnected');
-    // Remove player from the list
-    players = players.filter(p => p.id !== socket.id);
-    // Reset game if a player disconnects
-    board = Array(9).fill(null);
-    xIsNext = true;
-    io.emit('gameReset'); // Notify clients that the game has been reset
+    // Handle disconnection logic, reset rooms if necessary
   });
 });
 
